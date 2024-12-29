@@ -177,7 +177,7 @@ void main(List<String> args) async {
 // Exemplo de uso:
 void teste() async {
   final client = GameClient(
-    serverHost: 'https://tcpteste.onrender.com', // Substitua pelo seu endereço
+    serverHost: 'tcpteste.onrender.com', // Substitua pelo seu endereço
     serverPort: 10000, // Substitua pela sua porta
     playerName: 'Player${DateTime.now().millisecondsSinceEpoch}',
     onPositionUpdate: (position) {
