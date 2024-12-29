@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'client.dart';
+
 class Player {
   final String name;
   final InternetAddress address;
@@ -76,13 +78,30 @@ class GameServer {
 
   Future<void> start() async {
     try {
-      print('Iniciando servidor de jogo na porta $port...');
+      // Pegar porta do ambiente do Render
+      final port = int.parse(Platform.environment['PORT'] ?? '3000');
+
+      print('\n=== Servidor UDP ===');
+      print('Iniciando servidor na porta: $port');
 
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port,
-          reuseAddress: true // Permite reutilização da porta
-          );
+          reuseAddress: true);
 
       socket.broadcastEnabled = true;
+
+      print('''
+\n🎮 Servidor rodando!
+📡 Endereço: ${socket.address.address}
+🔌 Porta: ${socket.port}
+''');
+
+      // Logging para debug no Render
+      print('Variáveis de ambiente:');
+      Platform.environment.forEach((key, value) {
+        if (!key.toLowerCase().contains('secret')) {
+          print('$key: $value');
+        }
+      });
 
       print('Servidor iniciado com sucesso!');
 
@@ -154,84 +173,43 @@ void main(List<String> args) async {
   final server = GameServer();
 
   await server.start();
+  teste();
 }
 
-class GameClient {
-  final int port;
-  final Duration reconnectDelay;
-  final Duration pingInterval;
+// Exemplo de uso:
+void teste() async {
+  final client = GameClient(
+    serverHost: 'https://tcpteste.onrender.com', // Substitua pelo seu endereço
+    serverPort: 10000, // Substitua pela sua porta
+    playerName: 'Player${DateTime.now().millisecondsSinceEpoch}',
+    onPositionUpdate: (position) {
+      print('📍 Nova posição: (${position.x}, ${position.y})');
+    },
+    onPlayerJoined: (name) {
+      print('👋 Jogador entrou: $name');
+    },
+    onPlayerLeft: (name) {
+      print('👋 Jogador saiu: $name');
+    },
+    onConnectionStatus: (status) {
+      print('🔌 Status: $status');
+    },
+    initialPosition: Position(x: 0, y: 0),
+  );
 
-  RawDatagramSocket? _socket;
-  Timer? _pingTimer;
+  try {
+    await client.connect();
 
-  GameClient({
-    this.port = 0,
-    this.reconnectDelay = const Duration(seconds: 5),
-    this.pingInterval = const Duration(seconds: 30),
-  });
+    // Exemplo de atualização de posição
+    await Future.delayed(Duration(seconds: 2));
+    client.updatePosition(Position(x: 10, y: 20));
 
-  Future<void> connect() async {
-    try {
-      await _start();
-      _startPingTimer();
-    } catch (e) {
-      print('Erro ao conectar: $e');
-      _scheduleReconnect();
-    }
-  }
+    // Mantenha o programa rodando
+    await Future.delayed(Duration(seconds: 30));
 
-  Future<void> _start() async {
-    _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port,
-        reuseAddress: true);
-    _socket?.broadcastEnabled = true;
-    print('Cliente conectado na porta ${_socket?.port}');
-  }
-
-  void _startPingTimer() {
-    _pingTimer?.cancel();
-    _pingTimer = Timer.periodic(pingInterval, (timer) {
-      _sendPing();
-    });
-  }
-
-  void _sendPing() {
-    try {
-      final ping = Player(
-        name: 'ping',
-        position: {'x': 0, 'y': 0},
-      );
-      sendPlayer(ping);
-    } catch (e) {
-      print('Erro ao enviar ping: $e');
-    }
-  }
-
-  void _scheduleReconnect() {
-    Future.delayed(reconnectDelay, () {
-      connect();
-    });
-  }
-
-  Future<void> sendPlayer(Player player) async {
-    try {
-      _socket?.send(
-        utf8.encode(player
-            .copyWith(
-              port: _socket?.port,
-              address: _socket?.address,
-            )
-            .toString()),
-        InternetAddress.anyIPv4,
-        3000,
-      );
-    } catch (e) {
-      print('Erro ao enviar dados do jogador: $e');
-    }
-  }
-
-  void close() {
-    _pingTimer?.cancel();
-    _socket?.close();
-    print('Cliente desconectado');
+    // Desconectar
+    await client.disconnect();
+  } catch (e) {
+    print('❌ Erro: $e');
   }
 }
