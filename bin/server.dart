@@ -177,11 +177,11 @@ void main(List<String> args) async {
 // Exemplo de uso:
 void teste() async {
   final client = GameClient(
-    serverHost: 'tcpteste.onrender.com', // Substitua pelo seu endereço
+    serverHost: 'seu-servidor.onrender.com', // Substitua pelo seu servidor
     serverPort: 10000, // Substitua pela sua porta
-    playerName: 'Player${DateTime.now().millisecondsSinceEpoch}',
+    playerName: 'EdsonMello-${DateTime.now().millisecondsSinceEpoch}',
     onPositionUpdate: (position) {
-      print('📍 Nova posição: (${position.x}, ${position.y})');
+      print('📍 Posição atualizada: $position');
     },
     onPlayerJoined: (name) {
       print('👋 Jogador entrou: $name');
@@ -192,23 +192,28 @@ void teste() async {
     onConnectionStatus: (status) {
       print('🔌 Status: $status');
     },
+    onError: (error) {
+      print('❌ Erro: $error');
+    },
     initialPosition: Position(x: 0, y: 0),
   );
 
   try {
+    print('\n=== Iniciando Cliente de Jogo ===');
+    print('Data: ${DateTime.now().toUtc()}');
+    print('Player: ${client.playerName}');
+
     await client.connect();
 
     // Exemplo de atualização de posição
     await Future.delayed(Duration(seconds: 2));
     client.updatePosition(Position(x: 10, y: 20));
 
-    // Mantenha o programa rodando
-    await Future.delayed(Duration(seconds: 30));
-
-    // Desconectar
-    await client.disconnect();
+    // Manter o programa rodando
+    print('\nCliente rodando. Pressione Ctrl+C para sair...');
+    await Future.delayed(Duration(days: 1));
   } catch (e) {
-    print('❌ Erro: $e');
+    print('❌ Erro fatal: $e');
   }
 }
 
