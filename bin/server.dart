@@ -2,68 +2,68 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-class Player {
-  final String name;
-  final InternetAddress address;
-  final int port;
-  final Map<String, dynamic> position;
-  final String color;
+// class Player {
+//   final String name;
+//   final InternetAddress address;
+//   final int port;
+//   final Map<String, dynamic> position;
+//   final String color;
 
-  String get key => '${address.address}:$port';
+//   String get key => '${address.address}:$port';
 
-  const Player._({
-    required this.name,
-    required this.position,
-    required this.address,
-    required this.port,
-    required this.color,
-  });
+//   const Player._({
+//     required this.name,
+//     required this.position,
+//     required this.address,
+//     required this.port,
+//     required this.color,
+//   });
 
-  factory Player({
-    required String name,
-    required Map<String, dynamic> position,
-    String color = '#000000',
-  }) {
-    return Player._(
-      name: name,
-      address: InternetAddress.anyIPv4,
-      port: 0,
-      position: position,
-      color: color,
-    );
-  }
+//   factory Player({
+//     required String name,
+//     required Map<String, dynamic> position,
+//     String color = '#000000',
+//   }) {
+//     return Player._(
+//       name: name,
+//       address: InternetAddress.anyIPv4,
+//       port: 0,
+//       position: position,
+//       color: color,
+//     );
+//   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'name': name,
-      'address': address.address,
-      'port': port,
-      'position': position,
-      'color': color,
-    };
-  }
+//   Map<String, dynamic> toMap() {
+//     return {
+//       'name': name,
+//       'address': address.address,
+//       'port': port,
+//       'position': position,
+//       'color': color,
+//     };
+//   }
 
-  Player copyWith({
-    String? name,
-    InternetAddress? address,
-    int? port,
-    Map<String, dynamic>? position,
-    String? color,
-  }) {
-    return Player._(
-      name: name ?? this.name,
-      address: address ?? this.address,
-      port: port ?? this.port,
-      position: position ?? this.position,
-      color: color ?? this.color,
-    );
-  }
+//   Player copyWith({
+//     String? name,
+//     InternetAddress? address,
+//     int? port,
+//     Map<String, dynamic>? position,
+//     String? color,
+//   }) {
+//     return Player._(
+//       name: name ?? this.name,
+//       address: address ?? this.address,
+//       port: port ?? this.port,
+//       position: position ?? this.position,
+//       color: color ?? this.color,
+//     );
+//   }
 
-  @override
-  String toString() {
-    return jsonEncode(toMap());
-  }
-}
+//   @override
+//   String toString() {
+//     return jsonEncode(toMap());
+//   }
+// }
 
 class GameServer {
   late RawDatagramSocket socket;
@@ -149,7 +149,7 @@ class GameServer {
         socket.send(
           utf8.encode(player.toString()),
           InternetAddress.anyIPv4,
-          playerItem.port,
+          playerItem.port!,
         );
       }
     } catch (e) {
@@ -229,23 +229,95 @@ class Position {
       y: json['y']?.toDouble() ?? 0.0,
     );
   }
+
+  @override
+  String toString() => '(x: $x, y: $y)';
 }
+
+class Player {
+  final String name;
+  Position position;
+  final String color;
+  InternetAddress? address;
+  int? port;
+
+  Player({
+    required this.name,
+    required this.position,
+    this.color = '#ffffff',
+    this.address,
+    this.port,
+  });
+
+  // Getter para criar uma chave única para o player
+  String get key => '${address?.address}:$port';
+
+  // Método para criar uma cópia do player com novos valores
+  Player copyWith({
+    String? name,
+    Position? position,
+    String? color,
+    InternetAddress? address,
+    int? port,
+  }) {
+    return Player(
+      name: name ?? this.name,
+      position: position ?? this.position,
+      color: color ?? this.color,
+      address: address ?? this.address,
+      port: port ?? this.port,
+    );
+  }
+
+  // Converter para JSON
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'position': position.toJson(),
+        'color': color,
+        'address': address?.address,
+        'port': port,
+      };
+
+  // Criar a partir de JSON
+  factory Player.fromJson(Map<String, dynamic> json) {
+    return Player(
+      name: json['name'] as String,
+      position: Position.fromJson(json['position'] as Map<String, dynamic>),
+      color: json['color'] as String? ?? '#ffffff',
+      port: json['port'] as int?,
+      address: json['address'] != null
+          ? InternetAddress(json['address'] as String)
+          : null,
+    );
+  }
+
+  // Representação em string
+  @override
+  String toString() {
+    return jsonEncode(toJson());
+  }
+}
+
+enum ConnectionStatus { disconnected, connecting, connected, error }
 
 class GameClient {
   final String serverHost;
   final int serverPort;
+  final String playerName;
+  Position _position;
   RawDatagramSocket? _socket;
   Timer? _pingTimer;
   Timer? _reconnectionTimer;
-  bool _isConnected = false;
-  final String playerName;
-  Position _position;
+  ConnectionStatus _status = ConnectionStatus.disconnected;
+  final _reconnectInterval = Duration(seconds: 5);
+  final _pingInterval = Duration(seconds: 3);
 
-  // Callbacks para eventos do jogo
+  // Callbacks
   final void Function(Position)? onPositionUpdate;
   final void Function(String)? onPlayerJoined;
   final void Function(String)? onPlayerLeft;
   final void Function(String)? onConnectionStatus;
+  final void Function(String)? onError;
 
   GameClient({
     required this.serverHost,
@@ -255,35 +327,44 @@ class GameClient {
     this.onPlayerJoined,
     this.onPlayerLeft,
     this.onConnectionStatus,
+    this.onError,
     Position? initialPosition,
   }) : _position = initialPosition ?? Position(x: 0, y: 0);
 
-  bool get isConnected => _isConnected;
+  bool get isConnected => _status == ConnectionStatus.connected;
   Position get position => _position;
 
   Future<void> connect() async {
-    if (_isConnected) {
-      print('🔄 Já está conectado ao servidor');
+    if (_status == ConnectionStatus.connected) {
+      _log('Já está conectado ao servidor');
       return;
     }
 
     try {
-      print('🎮 Conectando ao servidor: $serverHost:$serverPort');
+      _status = ConnectionStatus.connecting;
+      _log('Iniciando conexão com $serverHost:$serverPort');
+      onConnectionStatus?.call('Conectando...');
 
+      // Resolver endereço do servidor
+      final serverAddresses = await InternetAddress.lookup(serverHost)
+          .timeout(Duration(seconds: 5));
+
+      if (serverAddresses.isEmpty) {
+        throw Exception('Não foi possível resolver o endereço $serverHost');
+      }
+
+      _log('Endereço resolvido: ${serverAddresses.first.address}');
+
+      // Criar socket
       _socket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
         0,
+        reuseAddress: true,
       );
 
-      final serverAddresses = await InternetAddress.lookup(serverHost);
-      if (serverAddresses.isEmpty) {
-        throw Exception('❌ Não foi possível resolver o endereço do servidor');
-      }
+      _log('Socket local criado na porta ${_socket!.port}');
 
-      final serverAddress = serverAddresses.first;
-      print('📡 Endereço do servidor resolvido: ${serverAddress.address}');
-
-      // Configurar listener para mensagens do servidor
+      // Configurar listeners
       _socket!.listen(
         _handleSocketEvent,
         onError: _handleSocketError,
@@ -291,7 +372,7 @@ class GameClient {
         cancelOnError: false,
       );
 
-      // Enviar mensagem inicial de conexão
+      // Enviar mensagem de conexão
       _sendToServer({
         'type': 'connect',
         'name': playerName,
@@ -299,42 +380,85 @@ class GameClient {
         'timestamp': DateTime.now().toIso8601String(),
       });
 
-      // Iniciar ping periódico
-      _startPingTimer();
+      _status = ConnectionStatus.connected;
+      onConnectionStatus?.call('Conectado');
 
-      _isConnected = true;
-      onConnectionStatus?.call('Conectado ao servidor');
-    } catch (e) {
-      print('❌ Erro ao conectar: $e');
-      onConnectionStatus?.call('Erro ao conectar: $e');
-      _startReconnectionTimer();
+      // Iniciar ping
+      _startPingTimer();
+    } catch (e, stack) {
+      _log('Erro ao conectar: $e\n$stack');
+      onError?.call('Erro ao conectar: $e');
+      _handleDisconnect();
       rethrow;
     }
   }
 
   void _handleSocketEvent(RawSocketEvent event) {
-    if (event == RawSocketEvent.read && _socket != null) {
-      final datagram = _socket!.receive();
-      if (datagram != null) {
-        _handleServerMessage(datagram);
+    switch (event) {
+      case RawSocketEvent.read:
+        if (_socket != null) {
+          final datagram = _socket!.receive();
+          if (datagram != null) {
+            _handleServerMessage(datagram);
+          }
+        }
+        break;
+      case RawSocketEvent.closed:
+        _handleDisconnect();
+        break;
+      default:
+        break;
+    }
+  }
+
+  void _handleServerMessage(Datagram datagram) {
+    try {
+      final message = utf8.decode(datagram.data);
+      final data = jsonDecode(message);
+
+      switch (data['type']) {
+        case 'position_update':
+          if (data['position'] != null) {
+            final newPosition = Position.fromJson(data['position']);
+            _position = newPosition;
+            onPositionUpdate?.call(newPosition);
+          }
+          break;
+        case 'player_joined':
+          if (data['name'] != null) {
+            onPlayerJoined?.call(data['name']);
+          }
+          break;
+        case 'player_left':
+          if (data['name'] != null) {
+            onPlayerLeft?.call(data['name']);
+          }
+          break;
+        case 'pong':
+          // Servidor respondeu ao ping
+          break;
+        default:
+          _log('Mensagem desconhecida: $message');
       }
+    } catch (e) {
+      _log('Erro ao processar mensagem: $e');
     }
   }
 
   void _handleSocketError(error) {
-    print('❌ Erro no socket: $error');
-    onConnectionStatus?.call('Erro na conexão: $error');
+    _log('Erro no socket: $error');
+    onError?.call('Erro na conexão: $error');
     _handleDisconnect();
   }
 
   void _handleSocketDone() {
-    print('📡 Conexão encerrada pelo servidor');
-    onConnectionStatus?.call('Conexão encerrada pelo servidor');
+    _log('Conexão finalizada pelo servidor');
     _handleDisconnect();
   }
 
   void _handleDisconnect() {
-    _isConnected = false;
+    _status = ConnectionStatus.disconnected;
+    onConnectionStatus?.call('Desconectado');
     _stopPingTimer();
     _socket?.close();
     _socket = null;
@@ -343,8 +467,8 @@ class GameClient {
 
   void _startPingTimer() {
     _pingTimer?.cancel();
-    _pingTimer = Timer.periodic(Duration(seconds: 5), (timer) {
-      if (_isConnected) {
+    _pingTimer = Timer.periodic(_pingInterval, (timer) {
+      if (isConnected) {
         _sendToServer({
           'type': 'ping',
           'name': playerName,
@@ -361,11 +485,11 @@ class GameClient {
 
   void _startReconnectionTimer() {
     _reconnectionTimer?.cancel();
-    _reconnectionTimer = Timer.periodic(Duration(seconds: 5), (timer) {
-      if (!_isConnected) {
-        print('🔄 Tentando reconectar...');
+    _reconnectionTimer = Timer.periodic(_reconnectInterval, (timer) {
+      if (!isConnected) {
+        _log('Tentando reconectar...');
         connect().catchError((e) {
-          print('❌ Falha na reconexão: $e');
+          _log('Falha na reconexão: $e');
         });
       } else {
         _reconnectionTimer?.cancel();
@@ -374,49 +498,9 @@ class GameClient {
     });
   }
 
-  void _handleServerMessage(Datagram datagram) {
-    try {
-      final String message = utf8.decode(datagram.data);
-      final data = jsonDecode(message);
-
-      switch (data['type']) {
-        case 'position_update':
-          if (data['position'] != null) {
-            final newPosition = Position.fromJson(data['position']);
-            _position = newPosition;
-            onPositionUpdate?.call(newPosition);
-          }
-          break;
-
-        case 'player_joined':
-          final playerName = data['name'];
-          if (playerName != null) {
-            onPlayerJoined?.call(playerName);
-          }
-          break;
-
-        case 'player_left':
-          final playerName = data['name'];
-          if (playerName != null) {
-            onPlayerLeft?.call(playerName);
-          }
-          break;
-
-        case 'pong':
-          // Servidor respondeu ao ping
-          break;
-
-        default:
-          print('📨 Mensagem desconhecida do servidor: $message');
-      }
-    } catch (e) {
-      print('❌ Erro ao processar mensagem do servidor: $e');
-    }
-  }
-
   void updatePosition(Position newPosition) {
     _position = newPosition;
-    if (_isConnected) {
+    if (isConnected) {
       _sendToServer({
         'type': 'position_update',
         'name': playerName,
@@ -427,22 +511,27 @@ class GameClient {
   }
 
   void _sendToServer(Map<String, dynamic> data) {
-    try {
-      if (_socket == null || !_isConnected) {
-        print('❌ Não está conectado ao servidor');
-        return;
-      }
+    if (_socket == null || !isConnected) {
+      _log('Não está conectado ao servidor');
+      return;
+    }
 
-      final message = utf8.encode(jsonEncode(data));
-      _socket!.send(message, InternetAddress(serverHost), serverPort);
+    try {
+      InternetAddress.lookup(serverHost).then((addresses) {
+        if (addresses.isEmpty) return;
+
+        final message = utf8.encode(jsonEncode(data));
+        final result = _socket!.send(message, addresses.first, serverPort);
+        _log('Enviado: $result bytes');
+      });
     } catch (e) {
-      print('❌ Erro ao enviar mensagem: $e');
+      _log('Erro ao enviar mensagem: $e');
       _handleDisconnect();
     }
   }
 
   Future<void> disconnect() async {
-    if (_isConnected) {
+    if (isConnected) {
       _sendToServer({
         'type': 'disconnect',
         'name': playerName,
@@ -450,12 +539,16 @@ class GameClient {
       });
     }
 
-    _isConnected = false;
+    _status = ConnectionStatus.disconnected;
     _stopPingTimer();
     _reconnectionTimer?.cancel();
     _reconnectionTimer = null;
     _socket?.close();
     _socket = null;
-    onConnectionStatus?.call('Desconectado do servidor');
+    onConnectionStatus?.call('Desconectado');
+  }
+
+  void _log(String message) {
+    print('🎮 [GameClient] $message');
   }
 }
