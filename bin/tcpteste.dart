@@ -72,7 +72,9 @@ class GameServer {
   Future<void> start() async {
     print('Game server started');
 
-    socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 3000);
+    final addresses = await InternetAddress.lookup('192.168.1.145');
+
+    socket = await RawDatagramSocket.bind(addresses.first, 3000);
     socket.broadcastEnabled = true;
 
     socket.listen((event) {
@@ -86,14 +88,15 @@ class GameServer {
           position: json['position'],
         ).copyWith(
           address: datagram.address,
-          port: datagram.port,
+          port: json['port'],
           color: json['color'],
         );
+
         players[player.key] = player;
         for (final playerItem in players.values) {
           socket.send(
             utf8.encode(player.toString()),
-            InternetAddress.anyIPv4,
+            playerItem.address,
             playerItem.port,
           );
         }
